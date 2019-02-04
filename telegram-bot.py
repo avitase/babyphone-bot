@@ -127,11 +127,11 @@ def button(bot, update):
 
     if callback_data == 'confirm_shutdown':
         logging.info('User %d confirmed shutdown.', update.effective_user.id)
-        os.system('sudo shutdown -h now')
+        os.system('/usr/bin/sudo shutdown -h now')
     elif callback_data == 'abort_shutdown':
         logging.info('User %d aborted shutdown.', update.effective_user.id)
     elif callback_data == 'confirm_reboot':
-        os.system('sudo reboot')
+        os.system('/usr/bin/sudo reboot')
         logging.info('User %d confirmed reboot.', update.effective_user.id)
     elif callback_data == 'abort_reboot':
         logging.info('User %d aborted reboot.', update.effective_user.id)
