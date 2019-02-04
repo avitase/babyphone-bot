@@ -15,7 +15,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     level=logging.INFO)
 
 
-def read_telegram_token(token_file_name = 'telegram-token.txt'):
+def read_telegram_token(token_file_name='telegram-token.txt'):
     with open(token_file_name, 'r') as f:
         return f.readline().strip()
 
@@ -41,10 +41,13 @@ known_cmd_filter = KnownCommand()
 
 
 def start(bot, update, args, pin):
-    if len(args) == 1 and args[0].isdigit() and int(args[0]) == pin:
-        global chat_id
-        chat_id = update.message.chat_id
+    global chat_id
+    if chat_id is None \
+            and len(args) == 1 \
+            and args[0].isdigit() \
+            and int(args[0]) == pin:
 
+        chat_id = update.message.chat_id
         bot.send_message(chat_id=update.message.chat_id,
                          text='Hey There! You just have successfully started your personal Babyphone Knecht.')
 
