@@ -125,6 +125,9 @@ def default_callback(bot, update):
 def button(bot, update):
     callback_data = update.callback_query.data
 
+    bot.delete_message(chat_id=update.callback_query.message.chat_id,
+                       message_id=update.callback_query.message.message_id)
+
     if callback_data == 'confirm_shutdown':
         logging.info('User %d confirmed shutdown.', update.effective_user.id)
         os.system('/usr/bin/sudo shutdown -h now')
