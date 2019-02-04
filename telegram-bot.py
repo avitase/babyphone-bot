@@ -5,18 +5,17 @@ import logging
 import netifaces
 import os
 from functools import wraps
-from typing import List, Optional
 
 import telegram
 from telegram.ext import Updater, BaseFilter, Filters, CommandHandler, MessageHandler, CallbackQueryHandler
 
-chat_id: Optional[int] = None
+chat_id = None
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
 
 
-def read_telegram_token(token_file_name: str = 'telegram-token.txt') -> str:
+def read_telegram_token(token_file_name = 'telegram-token.txt'):
     with open(token_file_name, 'r') as f:
         return f.readline().strip()
 
@@ -41,7 +40,7 @@ class KnownCommand(BaseFilter):
 known_cmd_filter = KnownCommand()
 
 
-def start(bot, update, args: List[str], pin: int):
+def start(bot, update, args, pin):
     if len(args) == 1 and args[0].isdigit() and int(args[0]) == pin:
         global chat_id
         chat_id = update.message.chat_id
@@ -121,7 +120,7 @@ def default_callback(bot, update):
 
 
 def button(bot, update):
-    callback_data: str = update.callback_query.data
+    callback_data = update.callback_query.data
 
     if callback_data == 'confirm_shutdown':
         logging.info('User %d confirmed shutdown.', update.effective_user.id)
