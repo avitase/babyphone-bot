@@ -90,9 +90,9 @@ def default_callback(bot, update):
     if message in ['/stream_url', cmds['/stream_url']]:
         ip = get_ip('wlan0')
         port = '8080'
-        url = f'{ip}:{port}/'
+        url = '{}:{}/'.format(ip, port)
         bot.send_message(chat_id=update.message.chat_id,
-                         text=f'[{url}]({url})',
+                         text='[{}]({})'.format(url, url),
                          parse_mode=telegram.ParseMode.MARKDOWN)
 
     elif message in ['/shutdown', cmds['/shutdown']]:
