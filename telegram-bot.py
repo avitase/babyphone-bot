@@ -1,143 +1,155 @@
 #!/usr/bin/env python3
 
-import argparse
 import logging
 import netifaces
 import os
-from functools import wraps
+from enum import Enum
+from functools import partial
 
 import telegram
-from telegram.ext import Updater, BaseFilter, Filters, CommandHandler, MessageHandler, CallbackQueryHandler
+from telegram.ext import Updater, BaseFilter, MessageHandler, Filters, CallbackQueryHandler
 
-chat_id = None
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+import settings
 
 
-def read_telegram_token(token_file_name='telegram-token.txt'):
-    with open(token_file_name, 'r') as f:
-        return f.readline().strip()
+def make_inline_keyboard(labels, callback_data):
+    return telegram.InlineKeyboardMarkup(
+        [[telegram.InlineKeyboardButton(label, callback_data=data) for (label, data) in zip(labels, callback_data)], ])
 
 
-def get_ip(interface):
-    return netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr']
+class Commands(Enum):
+    START = 1
+    VIDEO_STREAM = 2
+    STATS = 3
+    REBOOT = 4
+    SHUTDOWN = 5
+
+    def __str__(self):
+        if self.value == 1:
+            return '/start'
+        elif self.value == 2:
+            return 'video stream'
+        elif self.value == 3:
+            return 'statistics'
+        elif self.value == 4:
+            return 'reboot'
+        elif self.value == 5:
+            return 'shutdown'
+        return 'unknown'
 
 
-class KnownCommand(BaseFilter):
-    commands = {
-        '/help': 'help',
-        '/stream_url': 'URL of Live-Stream',
-        '/reboot': 'Reboot',
-        '/shutdown': 'Shutdown',
-    }
-
+class KnownCommandFilter(BaseFilter):
     def filter(self, message):
-        if message.text in self.commands: return True
-        return message.text in [self.commands[key] for key in self.commands]
+        cmd = message.text.lower().strip()
+        for c in Commands:
+            if str(c) == cmd: return True
+        return False
 
 
-known_cmd_filter = KnownCommand()
+def print_authentication_error(bot, message, user_id=None):
+    if user_id:
+        logging.warning('Unauthorized access denied for user %d.', user_id)
+    bot.send_message(chat_id=message.chat_id,
+                     text='Sorry, your chat id {} is invalid! '
+                          'This chat is not authorized to use the Babyphone Knecht.'.format(message.chat_id))
 
 
-def start(bot, update, args, pin):
-    global chat_id
-    if chat_id is None \
-            and len(args) == 1 \
-            and args[0].isdigit() \
-            and int(args[0]) == pin:
+def default_callback(bot, update, chat_id):
+    msg = update.message
 
-        chat_id = update.message.chat_id
-        bot.send_message(chat_id=update.message.chat_id,
-                         text='Hey There! You just have successfully started your personal Babyphone Knecht.')
-
-        cmds = known_cmd_filter.commands
-        keyboard = [
-            [cmds['/stream_url'], ],
-            [cmds['/reboot'], cmds['/shutdown'], ],
-        ]
-        bot.send_message(chat_id=update.message.chat_id,
-                         text='Use the keyboard to enter your commands.',
-                         reply_markup=telegram.ReplyKeyboardMarkup(keyboard))
+    if msg.chat_id != chat_id:
+        print_authentication_error(bot, msg, update.effective_user.id)
     else:
-        bot.send_message(chat_id=update.message.chat_id,
-                         text='Sorry, I could not authenticate you via PIN! '
-                              'Please restart me and pass a valid PIN.')
+        cmd = None
+        for c in Commands:
+            if str(c) == msg.text.lower().strip():
+                cmd = c
+                break
+
+        assert cmd is not None
+
+        handler = None
+        if cmd == Commands.START:
+            handler = handle_cmd_start
+        elif cmd == Commands.VIDEO_STREAM:
+            handler = handle_cmd_video_stream
+        elif cmd == Commands.STATS:
+            handler = handle_cmd_stats
+        elif cmd == Commands.SHUTDOWN:
+            handler == handle_cmd_shutdown
+        elif cmd == Commands.REBOOT:
+            handler = handle_cmd_reboot
+
+        handler(bot, update)
 
 
-def check_authentication(f):
-    @wraps(f)
-    def wrapper(bot, update, *args, **kwargs):
-        if update.message.chat_id == chat_id:
-            f(bot, update, *args, **kwargs)
-        else:
-            logging.warning('Unauthorized access denied for %d.', update.effective_user.id)
-            bot.send_message(chat_id=update.message.chat_id,
-                             text='Sorry, I could not authenticate you via PIN! '
-                                  'Please restart me and pass a valid PIN.')
-
-    return wrapper
-
-
-@check_authentication
-def usage(bot, update):
+def handle_cmd_start(bot, update):
     bot.send_message(chat_id=update.message.chat_id,
-                     text='Hello, I am your friendly Babyphone Knecht. '
-                          'Use the keyboard to enter your commands.')
+                     text='Hey There! You just have successfully started your personal Babyphone Knecht.')
+
+    keyboard = [
+        ['Video Stream', ],
+        ['Statistics', ],
+        ['Reboot', 'Shutdown', ],
+    ]
+    bot.send_message(chat_id=update.message.chat_id,
+                     text='Use the keyboard to enter your commands.',
+                     reply_markup=telegram.ReplyKeyboardMarkup(keyboard))
 
 
-@check_authentication
-def default_callback(bot, update):
-    message = update.message.text
-    cmds = known_cmd_filter.commands
-    if message in ['/stream_url', cmds['/stream_url']]:
-        ip = get_ip('wlan0')
-        port = '8080'
-        url = '{}:{}/'.format(ip, port)
-        bot.send_message(chat_id=update.message.chat_id,
-                         text='[{}]({})'.format(url, url),
-                         parse_mode=telegram.ParseMode.MARKDOWN)
+def handle_cmd_video_stream(bot, update):
+    interface = settings.NET_INTERFACE
+    ip = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr']
+    port = '8080'
+    url = '{}:{}/'.format(ip, port)
+    bot.send_message(chat_id=update.message.chat_id,
+                     text='The Video live stream is available at [{}]({})'.format(url, url),
+                     parse_mode=telegram.ParseMode.MARKDOWN)
 
-    elif message in ['/shutdown', cmds['/shutdown']]:
-        logging.info('User %d requested shutdown.', update.effective_user.id)
-        yes_no_buttons = [
-            [telegram.InlineKeyboardButton('Confirm', callback_data='confirm_shutdown'),
-             telegram.InlineKeyboardButton('Abort', callback_data='abort_shutdown'), ],
-        ]
-        bot.send_message(chat_id=update.message.chat_id,
-                         text='Please confirm shutdown',
-                         reply_markup=telegram.InlineKeyboardMarkup(yes_no_buttons))
 
-    elif message in ['/reboot', cmds['/reboot']]:
-        logging.info('User %d requested reboot.', update.effective_user.id)
-        yes_no_buttons = [
-            [telegram.InlineKeyboardButton('Confirm', callback_data='confirm_reboot'),
-             telegram.InlineKeyboardButton('Abort', callback_data='abort_reboot'), ],
-        ]
-        bot.send_message(chat_id=update.message.chat_id,
-                         text='Please confirm reboot',
-                         reply_markup=telegram.InlineKeyboardMarkup(yes_no_buttons))
+def handle_cmd_stats(bot, update):
+    uptime = os.popen('/usr/bin/uptime -p').read().lstrip('up').strip()
+    bot.send_message(chat_id=update.message.chat_id,
+                     text='Uptime: {}'.format(uptime),
+                     parse_mode=telegram.ParseMode.MARKDOWN)
 
+
+def handle_cmd_shutdown(bot, update):
+    logging.info('User %d requested shutdown.', update.effective_user.id)
+    buttons = make_inline_keyboard(['Confirm', 'Abort'], ['confirm_shutdown', 'abort_shutdown'])
+    bot.send_message(chat_id=update.message.chat_id,
+                     text='Please confirm shutdown',
+                     reply_markup=buttons)
+
+
+def handle_cmd_reboot(bot, update):
+    logging.info('User %d requested reboot.', update.effective_user.id)
+    buttons = make_inline_keyboard(['Confirm', 'Abort'], ['confirm_reboot', 'abort_reboot'])
+    bot.send_message(chat_id=update.message.chat_id,
+                     text='Please confirm reboot',
+                     reply_markup=buttons)
+
+
+def button(bot, update, chat_id):
+    if update.callback_query.message.chat_id != chat_id:
+        print_authentication_error(bot, update.callback_query.message)
     else:
-        unknown(bot, update)
+        callback_data = update.callback_query.data
 
+        bot.delete_message(chat_id=update.callback_query.message.chat_id,
+                           message_id=update.callback_query.message.message_id)
 
-def button(bot, update):
-    callback_data = update.callback_query.data
-
-    bot.delete_message(chat_id=update.callback_query.message.chat_id,
-                       message_id=update.callback_query.message.message_id)
-
-    if callback_data == 'confirm_shutdown':
-        logging.info('User %d confirmed shutdown.', update.effective_user.id)
-        os.system('/usr/bin/sudo shutdown -h now')
-    elif callback_data == 'abort_shutdown':
-        logging.info('User %d aborted shutdown.', update.effective_user.id)
-    elif callback_data == 'confirm_reboot':
-        os.system('/usr/bin/sudo reboot')
-        logging.info('User %d confirmed reboot.', update.effective_user.id)
-    elif callback_data == 'abort_reboot':
-        logging.info('User %d aborted reboot.', update.effective_user.id)
+        user_id = update.effective_user.id
+        if callback_data == 'confirm_shutdown':
+            logging.info('User %d confirmed shutdown.', user_id)
+            os.system('/usr/bin/sudo shutdown -h now')
+        elif callback_data == 'abort_shutdown':
+            logging.info('User %d aborted shutdown.', user_id)
+        elif callback_data == 'confirm_reboot':
+            os.system('/usr/bin/sudo reboot')
+            logging.info('User %d confirmed reboot.', user_id)
+        elif callback_data == 'abort_reboot':
+            logging.info('User %d aborted reboot.', user_id)
 
 
 def unknown(bot, update):
@@ -146,34 +158,23 @@ def unknown(bot, update):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Start Telegram Bot for Babyphone.')
-    parser.add_argument('--pin',
-                        type=int,
-                        required=True,
-                        help='PIN (integer) for authenticating telegram chat')
+    token = settings.TELEGRAM_TOKEN
+    assert token
 
-    args = parser.parse_args()
-    pin = args.pin
-    logging.info('PIN: %d', pin)
+    chat_id = settings.CHAT_ID
+    assert chat_id
 
-    updater = Updater(token=read_telegram_token())
+    log_level = settings.LOG_LEVEL
+    assert log_level
+    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                        level=log_level)
+
+    updater = Updater(token=token)
     dispatcher = updater.dispatcher
 
-    start_handler = CommandHandler('start',
-                                   lambda bot, update, args: start(bot, update, args, pin=pin),
-                                   pass_args=True)
-    dispatcher.add_handler(start_handler)
+    dispatcher.add_handler(MessageHandler(KnownCommandFilter(), partial(default_callback, chat_id=chat_id)))
+    dispatcher.add_handler(MessageHandler(Filters.command, unknown))
 
-    help_handler = CommandHandler('help', usage, pass_args=False)
-    dispatcher.add_handler(help_handler)
-
-    default_callback_handler = MessageHandler(known_cmd_filter, default_callback)
-    dispatcher.add_handler(default_callback_handler)
-
-    button_handler = CallbackQueryHandler(button)
-    dispatcher.add_handler(button_handler)
-
-    unknown_handler = MessageHandler(Filters.command, unknown)
-    dispatcher.add_handler(unknown_handler)
+    dispatcher.add_handler(CallbackQueryHandler(partial(button, chat_id=chat_id)))
 
     updater.start_polling()

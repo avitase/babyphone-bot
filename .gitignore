@@ -62,5 +62,6 @@ venv/
 # IDEA
 .idea/
 
-# Tokens
-telegram-token.txt
+# settings.py
+#  here we store the telegram token and the chat id
+settings.py
