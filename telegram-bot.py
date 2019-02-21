@@ -4,17 +4,12 @@ import logging
 import netifaces
 import os
 from enum import Enum
-from functools import partial
 
+import emoji
 import telegram
-from telegram.ext import Updater, BaseFilter, MessageHandler, Filters, CallbackQueryHandler
 
 import settings
-
-
-def make_inline_keyboard(labels, callback_data):
-    return telegram.InlineKeyboardMarkup(
-        [[telegram.InlineKeyboardButton(label, callback_data=data) for (label, data) in zip(labels, callback_data)], ])
+from message_handler import MessageHandler
 
 
 class Commands(Enum):
@@ -35,57 +30,27 @@ class Commands(Enum):
             return 'reboot'
         elif self.value == 5:
             return 'shutdown'
-        return 'unknown'
 
 
-class KnownCommandFilter(BaseFilter):
-    def filter(self, message):
-        cmd = message.text.lower().strip()
-        for c in Commands:
-            if str(c) == cmd: return True
-        return False
+def emojize(idx):
+    return emoji.emojize(':{}:'.format(idx.strip(':')), use_aliases=True)
 
 
-def print_authentication_error(bot, message, user_id=None):
-    if user_id:
-        logging.warning('Unauthorized access denied for user %d.', user_id)
-    bot.send_message(chat_id=message.chat_id,
-                     text='Sorry, your chat id {} is invalid! '
-                          'This chat is not authorized to use the Babyphone Knecht.'.format(message.chat_id))
+mh = MessageHandler(token=settings.TELEGRAM_TOKEN,
+                    chat_id=settings.CHAT_ID,
+                    commands=[str(c) for c in Commands],
+                    queries=['confirm_shutdown',
+                             'abort_shutdown',
+                             'confirm_reboot',
+                             'abort_reboot'])
 
 
-def default_callback(bot, update, chat_id):
-    msg = update.message
-
-    if msg.chat_id != chat_id:
-        print_authentication_error(bot, msg, update.effective_user.id)
-    else:
-        cmd = None
-        for c in Commands:
-            if str(c) == msg.text.lower().strip():
-                cmd = c
-                break
-
-        assert cmd is not None
-
-        handler = None
-        if cmd == Commands.START:
-            handler = handle_cmd_start
-        elif cmd == Commands.VIDEO_STREAM:
-            handler = handle_cmd_video_stream
-        elif cmd == Commands.STATS:
-            handler = handle_cmd_stats
-        elif cmd == Commands.SHUTDOWN:
-            handler == handle_cmd_shutdown
-        elif cmd == Commands.REBOOT:
-            handler = handle_cmd_reboot
-
-        handler(bot, update)
-
-
+@mh.register_callback(str(Commands.START))
 def handle_cmd_start(bot, update):
+    emoji = emojize('wave')
     bot.send_message(chat_id=update.message.chat_id,
-                     text='Hey There! You just have successfully started your personal Babyphone Knecht.')
+                     text='Hey There{} '
+                          'You just have successfully started your personal Babyphone Knecht.'.format(emoji))
 
     keyboard = [
         ['Video Stream', ],
@@ -93,88 +58,80 @@ def handle_cmd_start(bot, update):
         ['Reboot', 'Shutdown', ],
     ]
     bot.send_message(chat_id=update.message.chat_id,
-                     text='Use the keyboard to enter your commands.',
+                     text='Use the dedicated keyboard to enter your commands.',
                      reply_markup=telegram.ReplyKeyboardMarkup(keyboard))
 
 
+@mh.register_callback(str(Commands.VIDEO_STREAM))
 def handle_cmd_video_stream(bot, update):
     interface = settings.NET_INTERFACE
     ip = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr']
     port = '8080'
     url = '{}:{}/'.format(ip, port)
+    emoji = emojize('computer')
     bot.send_message(chat_id=update.message.chat_id,
-                     text='The Video live stream is available at [{}]({})'.format(url, url),
+                     text='The Video live stream is available at [{}]({}) {}'.format(url, url, emoji),
                      parse_mode=telegram.ParseMode.MARKDOWN)
 
 
+@mh.register_callback(str(Commands.STATS))
 def handle_cmd_stats(bot, update):
     uptime = os.popen('/usr/bin/uptime -p').read().lstrip('up').strip()
+    emoji = emojize('alarm_clock')
     bot.send_message(chat_id=update.message.chat_id,
-                     text='Uptime: {}'.format(uptime),
+                     text='{} Uptime: {}'.format(emoji, uptime),
                      parse_mode=telegram.ParseMode.MARKDOWN)
 
 
+def make_inline_keyboard(labels, callback_data):
+    return telegram.InlineKeyboardMarkup(
+        [[telegram.InlineKeyboardButton(label, callback_data=data) for (label, data) in zip(labels, callback_data)], ])
+
+
+@mh.register_callback(str(Commands.SHUTDOWN))
 def handle_cmd_shutdown(bot, update):
     logging.info('User %d requested shutdown.', update.effective_user.id)
     buttons = make_inline_keyboard(['Confirm', 'Abort'], ['confirm_shutdown', 'abort_shutdown'])
+    emoji = emojize('point_up')
     bot.send_message(chat_id=update.message.chat_id,
-                     text='Please confirm shutdown',
+                     text='Please confirm shutdown {}'.format(emoji),
                      reply_markup=buttons)
 
 
+@mh.register_callback(str(Commands.REBOOT))
 def handle_cmd_reboot(bot, update):
     logging.info('User %d requested reboot.', update.effective_user.id)
     buttons = make_inline_keyboard(['Confirm', 'Abort'], ['confirm_reboot', 'abort_reboot'])
+    emoji = emojize('point_up')
     bot.send_message(chat_id=update.message.chat_id,
-                     text='Please confirm reboot',
+                     text='Please confirm reboot {}'.format(emoji),
                      reply_markup=buttons)
 
 
-def button(bot, update, chat_id):
-    if update.callback_query.message.chat_id != chat_id:
-        print_authentication_error(bot, update.callback_query.message)
-    else:
-        callback_data = update.callback_query.data
-
-        bot.delete_message(chat_id=update.callback_query.message.chat_id,
-                           message_id=update.callback_query.message.message_id)
-
-        user_id = update.effective_user.id
-        if callback_data == 'confirm_shutdown':
-            logging.info('User %d confirmed shutdown.', user_id)
-            os.system('/usr/bin/sudo shutdown -h now')
-        elif callback_data == 'abort_shutdown':
-            logging.info('User %d aborted shutdown.', user_id)
-        elif callback_data == 'confirm_reboot':
-            os.system('/usr/bin/sudo reboot')
-            logging.info('User %d confirmed reboot.', user_id)
-        elif callback_data == 'abort_reboot':
-            logging.info('User %d aborted reboot.', user_id)
+@mh.register_query_callback('confirm_shutdown')
+def handle_query_confirm_shutdown(bot, update):
+    logging.info('User %d confirmed shutdown.', update.effective_user.id)
+    os.system('/usr/bin/sudo shutdown -h now')
 
 
-def unknown(bot, update):
-    bot.send_message(chat_id=update.message.chat_id,
-                     text="Sorry, I didn't understand that command.")
+@mh.register_query_callback('abort_shutdown')
+def handle_query_abort_shutdown(bot, update):
+    logging.info('User %d aborted shutdown.', update.effective_user.id)
+
+
+@mh.register_query_callback('confirm_reboot')
+def handle_query_confirm_reboot(bot, update):
+    logging.info('User %d confirmed reboot.', update.effective_user.id)
+    os.system('/usr/bin/sudo reboot')
+
+
+@mh.register_query_callback('abort_reboot')
+def handle_query_abort_reboot(bot, update):
+    logging.info('User %d aborted reboot.', update.effective_user.id)
 
 
 if __name__ == '__main__':
-    token = settings.TELEGRAM_TOKEN
-    assert token
-
-    chat_id = settings.CHAT_ID
-    assert chat_id
-
-    log_level = settings.LOG_LEVEL
-    assert log_level
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=log_level)
+                        level=settings.LOG_LEVEL)
 
-    updater = Updater(token=token)
-    dispatcher = updater.dispatcher
-
-    dispatcher.add_handler(MessageHandler(KnownCommandFilter(), partial(default_callback, chat_id=chat_id)))
-    dispatcher.add_handler(MessageHandler(Filters.command, unknown))
-
-    dispatcher.add_handler(CallbackQueryHandler(partial(button, chat_id=chat_id)))
-
-    updater.start_polling()
+    mh.run()
