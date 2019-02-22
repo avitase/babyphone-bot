@@ -83,10 +83,13 @@ def handle_cmd_video_stream(bot, update):
 def handle_cmd_snapshot_stream(bot, update):
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
-    socket.connect(settings.CAMERA_SOCKET)
-    socket.send_string('')
-    binary_img = socket.recv()
-    bot.send_photo(chat_id=update.message.chat_id, photo=io.BytesIO(binary_img))
+    try:
+        socket.connect(settings.CAMERA_SOCKET)
+        socket.send_string('')
+        binary_img = socket.recv()
+        bot.send_photo(chat_id=update.message.chat_id, photo=io.BytesIO(binary_img))
+    except Exception as e:
+        logging.error(f'Could not get and send snapshot. Error message was: \'{str(e)}\'')
 
 
 @mh.register_callback(str(Commands.STATS))
