@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import io
 import logging
 import netifaces
 import os
@@ -7,6 +8,7 @@ from enum import Enum
 
 import emoji
 import telegram
+import zmq
 
 import settings
 from message_handler import MessageHandler
@@ -15,9 +17,10 @@ from message_handler import MessageHandler
 class Commands(Enum):
     START = 1
     VIDEO_STREAM = 2
-    STATS = 3
-    REBOOT = 4
-    SHUTDOWN = 5
+    SNAPSHOT = 3
+    STATS = 4
+    REBOOT = 5
+    SHUTDOWN = 6
 
     def __str__(self):
         if self.value == 1:
@@ -25,10 +28,12 @@ class Commands(Enum):
         elif self.value == 2:
             return 'video stream'
         elif self.value == 3:
-            return 'statistics'
+            return 'snapshot'
         elif self.value == 4:
-            return 'reboot'
+            return 'statistics'
         elif self.value == 5:
+            return 'reboot'
+        elif self.value == 6:
             return 'shutdown'
 
 
@@ -53,7 +58,7 @@ def handle_cmd_start(bot, update):
                           'You just have successfully started your personal Babyphone Knecht.'.format(emoji))
 
     keyboard = [
-        ['Video Stream', ],
+        ['Video Stream', 'Snapshot'],
         ['Statistics', ],
         ['Reboot', 'Shutdown', ],
     ]
@@ -72,6 +77,16 @@ def handle_cmd_video_stream(bot, update):
     bot.send_message(chat_id=update.message.chat_id,
                      text='The Video live stream is available at [{}]({}) {}'.format(url, url, emoji),
                      parse_mode=telegram.ParseMode.MARKDOWN)
+
+
+@mh.register_callback(str(Commands.SNAPSHOT))
+def handle_cmd_snapshot_stream(bot, update):
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect(settings.CAMERA_SOCKET)
+    socket.send_string('')
+    binary_img = socket.recv()
+    bot.send_photo(chat_id=update.message.chat_id, photo=io.BytesIO(binary_img))
 
 
 @mh.register_callback(str(Commands.STATS))
