@@ -52,6 +52,8 @@ mh = MessageHandler(token=settings.TELEGRAM_TOKEN,
 
 @mh.register_callback(str(Commands.START))
 def handle_cmd_start(bot, update):
+    logging.info('Processing command /start')
+
     emoji = emojize('wave')
     bot.send_message(chat_id=update.message.chat_id,
                      text='Hey There{} '
@@ -69,6 +71,8 @@ def handle_cmd_start(bot, update):
 
 @mh.register_callback(str(Commands.VIDEO_STREAM))
 def handle_cmd_video_stream(bot, update):
+    logging.info('Processing command VIDEO_STREAM')
+
     interface = settings.NET_INTERFACE
     ip = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr']
     port = '8080'
@@ -81,6 +85,8 @@ def handle_cmd_video_stream(bot, update):
 
 @mh.register_callback(str(Commands.SNAPSHOT))
 def handle_cmd_snapshot_stream(bot, update):
+    logging.info('Processing command SNAPSHOT')
+
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
     try:
@@ -94,6 +100,8 @@ def handle_cmd_snapshot_stream(bot, update):
 
 @mh.register_callback(str(Commands.STATS))
 def handle_cmd_stats(bot, update):
+    logging.info('Processing command STATS')
+
     uptime = os.popen('/usr/bin/uptime -p').read().lstrip('up').strip()
     emoji = emojize('alarm_clock')
     bot.send_message(chat_id=update.message.chat_id,
