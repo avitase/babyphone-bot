@@ -90,9 +90,16 @@ def handle_cmd_snapshot_stream(bot, update):
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
     try:
+        logging.debug('Connecting to camera socket \'{}\''.format(settings.CAMERA_SOCKET))
         socket.connect(settings.CAMERA_SOCKET)
+
+        logging.debug('Sending empty to string to camera')
         socket.send_string('')
+
+        logging.debug('Waiting for response from camera')
         binary_img = socket.recv()
+
+        logging.debug('Received bytes from camera')
         bot.send_photo(chat_id=update.message.chat_id, photo=io.BytesIO(binary_img))
     except Exception as e:
         logging.error('Could not get and send snapshot. Error message was: \'{}\''.format(str(e)))
