@@ -89,7 +89,7 @@ def handle_cmd_snapshot_stream(bot, update):
         binary_img = socket.recv()
         bot.send_photo(chat_id=update.message.chat_id, photo=io.BytesIO(binary_img))
     except Exception as e:
-        logging.error(f'Could not get and send snapshot. Error message was: \'{str(e)}\'')
+        logging.error('Could not get and send snapshot. Error message was: \'{}\''.format(str(e)))
 
 
 @mh.register_callback(str(Commands.STATS))
