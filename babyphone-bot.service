@@ -1,6 +1,6 @@
 [Unit]
 Description=Babyphone Telegram Bot
-After=network.target
+After=network.target camera_server.service
 
 [Service]
 User=pi
