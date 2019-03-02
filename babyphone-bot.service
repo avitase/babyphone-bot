@@ -8,6 +8,7 @@ Group=pi
 WorkingDirectory=/home/pi/babyphone-bot
 Environment="PATH=/home/pi/babyphone-bot/venv/bin"
 ExecStart=/home/pi/babyphone-bot/venv/bin/python telegram-bot.py
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
