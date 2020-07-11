@@ -128,16 +128,16 @@ def button(bot, update):
     bot.delete_message(chat_id=update.callback_query.message.chat_id,
                        message_id=update.callback_query.message.message_id)
 
-    if callback_data == 'confirm_shutdown':
-        logging.info('User %d confirmed shutdown.', update.effective_user.id)
-        os.system('/usr/bin/sudo shutdown -h now')
+    if callback_data == 'abort_reboot':
+        logging.info('User %d aborted reboot.', update.effective_user.id)
     elif callback_data == 'abort_shutdown':
         logging.info('User %d aborted shutdown.', update.effective_user.id)
     elif callback_data == 'confirm_reboot':
         os.system('/usr/bin/sudo reboot')
         logging.info('User %d confirmed reboot.', update.effective_user.id)
-    elif callback_data == 'abort_reboot':
-        logging.info('User %d aborted reboot.', update.effective_user.id)
+    elif callback_data == 'confirm_shutdown':
+        logging.info('User %d confirmed shutdown.', update.effective_user.id)
+        os.system('/usr/bin/sudo shutdown -h now')
 
 
 def unknown(bot, update):
